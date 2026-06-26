@@ -33,6 +33,10 @@ export default function JsonInspector({ callback, onClose }) {
               <span className="ml-2 font-mono text-gray-900">{callback.agent_id || 'N/A'}</span>
             </div>
             <div>
+              <span className="text-gray-500">Mediator ID:</span>
+              <span className="ml-2 font-mono text-gray-900">{callback.mediator_id || 'N/A'}</span>
+            </div>
+            <div>
               <span className="text-gray-500">Bundle ID:</span>
               <span className="ml-2 font-mono text-gray-900">{callback.bundle_id || 'N/A'}</span>
             </div>

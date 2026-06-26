@@ -3,15 +3,17 @@ import { useState } from 'react';
 export default function FilterBar({ onFilter, onClear }) {
   const [traceId, setTraceId] = useState('');
   const [resourceType, setResourceType] = useState('');
+  const [mediatorId, setMediatorId] = useState('');
 
   const handleFilter = () => {
-    onFilter({ traceId: traceId.trim(), resourceType });
+    onFilter({ traceId: traceId.trim(), resourceType, mediatorId: mediatorId.trim() });
   };
 
   const handleReset = () => {
     setTraceId('');
     setResourceType('');
-    onFilter({ traceId: '', resourceType: '' });
+    setMediatorId('');
+    onFilter({ traceId: '', resourceType: '', mediatorId: '' });
   };
 
   return (
@@ -24,9 +26,17 @@ export default function FilterBar({ onFilter, onClear }) {
         onKeyDown={e => e.key === 'Enter' && handleFilter()}
         className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-64"
       />
+      <input
+        type="text"
+        placeholder="Filter by mediatorId..."
+        value={mediatorId}
+        onChange={e => setMediatorId(e.target.value)}
+        onKeyDown={e => e.key === 'Enter' && handleFilter()}
+        className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-64"
+      />
       <select
         value={resourceType}
-        onChange={e => { setResourceType(e.target.value); onFilter({ traceId: traceId.trim(), resourceType: e.target.value }); }}
+        onChange={e => { setResourceType(e.target.value); onFilter({ traceId: traceId.trim(), resourceType: e.target.value, mediatorId: mediatorId.trim() }); }}
         className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
       >
         <option value="">All Resource Types</option>

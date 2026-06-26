@@ -1,7 +1,7 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 
-const DB_PATH = path.join(__dirname, '..', 'data', 'callbacks.db');
+const DB_PATH = process.env.CALLBACKS_DB_PATH || path.join(__dirname, '..', 'data', 'callbacks.db');
 
 let db;
 
@@ -20,6 +20,7 @@ function getDb() {
         trace_id TEXT,
         agent_id TEXT,
         bundle_id TEXT,
+        mediator_id TEXT,
         resource_type TEXT,
         status TEXT DEFAULT 'valid',
         envelope_type TEXT,
@@ -29,6 +30,12 @@ function getDb() {
         created_at TEXT DEFAULT (datetime('now'))
       )
     `);
+
+    const columns = db.prepare('PRAGMA table_info(callbacks)').all();
+    const hasMediatorIdColumn = columns.some((column) => column.name === 'mediator_id');
+    if (!hasMediatorIdColumn) {
+      db.exec('ALTER TABLE callbacks ADD COLUMN mediator_id TEXT');
+    }
 
     db.exec(`
       CREATE INDEX IF NOT EXISTS idx_trace_id ON callbacks(trace_id);
@@ -41,14 +48,14 @@ function getDb() {
 
 function insertCallback(record) {
   const stmt = getDb().prepare(`
-    INSERT INTO callbacks (trace_id, agent_id, bundle_id, resource_type, status, envelope_type, ingestion_latency_ms, payload, received_at)
-    VALUES (@trace_id, @agent_id, @bundle_id, @resource_type, @status, @envelope_type, @ingestion_latency_ms, @payload, @received_at)
+    INSERT INTO callbacks (trace_id, agent_id, bundle_id, mediator_id, resource_type, status, envelope_type, ingestion_latency_ms, payload, received_at)
+    VALUES (@trace_id, @agent_id, @bundle_id, @mediator_id, @resource_type, @status, @envelope_type, @ingestion_latency_ms, @payload, @received_at)
   `);
   const result = stmt.run(record);
   return result.lastInsertRowid;
 }
 
-function getCallbacks({ limit = 100, offset = 0, traceId, resourceType } = {}) {
+function getCallbacks({ limit = 100, offset = 0, traceId, resourceType, mediatorId } = {}) {
   let query = 'SELECT * FROM callbacks WHERE 1=1';
   const params = {};
 
@@ -59,6 +66,10 @@ function getCallbacks({ limit = 100, offset = 0, traceId, resourceType } = {}) {
   if (resourceType) {
     query += ' AND resource_type = @resourceType';
     params.resourceType = resourceType;
+  }
+  if (mediatorId) {
+    query += ' AND mediator_id LIKE @mediatorId';
+    params.mediatorId = `%${mediatorId}%`;
   }
 
   query += ' ORDER BY id DESC LIMIT @limit OFFSET @offset';

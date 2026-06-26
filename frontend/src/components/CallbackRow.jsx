@@ -27,6 +27,9 @@ export default function CallbackRow({ callback, onClick }) {
         {callback.agent_id || '-'}
       </td>
       <td className="px-4 py-3 text-xs font-mono text-gray-600 max-w-[120px] truncate">
+        {callback.mediator_id || '-'}
+      </td>
+      <td className="px-4 py-3 text-xs font-mono text-gray-600 max-w-[120px] truncate">
         {callback.bundle_id || '-'}
       </td>
       <td className="px-4 py-3">

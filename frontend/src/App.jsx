@@ -12,7 +12,7 @@ export default function App() {
   const [stats, setStats] = useState(null);
   const [selectedCallback, setSelectedCallback] = useState(null);
   const [connected, setConnected] = useState(false);
-  const [filters, setFilters] = useState({ traceId: '', resourceType: '' });
+  const [filters, setFilters] = useState({ traceId: '', resourceType: '', mediatorId: '' });
   const tableRef = useRef(null);
 
   useEffect(() => {
@@ -48,6 +48,7 @@ export default function App() {
     const params = new URLSearchParams();
     if (filters.traceId) params.set('traceId', filters.traceId);
     if (filters.resourceType) params.set('resourceType', filters.resourceType);
+    if (filters.mediatorId) params.set('mediatorId', filters.mediatorId);
     params.set('limit', '200');
 
     const res = await fetch(`${API_BASE}/api/v1/callbacks?${params}`);
@@ -97,6 +98,7 @@ export default function App() {
                   <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase">Trace ID</th>
                   <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase">Resource Type</th>
                   <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase">Agent ID</th>
+                  <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase">Mediator ID</th>
                   <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase">Bundle ID</th>
                   <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase">Envelope</th>
                   <th className="px-4 py-3 text-xs font-medium text-gray-500 uppercase">Latency</th>
@@ -105,7 +107,7 @@ export default function App() {
               <tbody>
                 {callbacks.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-12 text-center text-gray-400">
+                    <td colSpan={9} className="px-4 py-12 text-center text-gray-400">
                       No callbacks received yet. Send a POST to <code className="bg-gray-100 px-2 py-1 rounded">/api/v1/callback</code>
                     </td>
                   </tr>
