@@ -4,6 +4,7 @@ const path = require('path');
 const http = require('http');
 const { Server } = require('socket.io');
 const { insertCallback, getCallbacks, getStats, clearAll } = require('./db');
+const { extractFhirData } = require('./fhirPayloadParser');
 
 const app = express();
 const server = http.createServer(app);
@@ -19,73 +20,6 @@ app.use(express.json({ limit: '10mb' }));
 // Serve frontend static files
 app.use(express.static(path.join(__dirname, '../../frontend/dist')));
 
-function detectEnvelopeType(payload) {
-  if (payload.topic || payload.partition !== undefined || payload.offset !== undefined || payload.key) {
-    return 'Wrapped';
-  }
-  return 'Unwrapped';
-}
-
-function extractFhirData(payload) {
-  const envelopeType = detectEnvelopeType(payload);
-  let fhirPayload = payload;
-
-  if (envelopeType === 'Wrapped') {
-    fhirPayload = payload.value || payload.message || payload.data || payload;
-    if (typeof fhirPayload === 'string') {
-      try { fhirPayload = JSON.parse(fhirPayload); } catch { /* keep as-is */ }
-    }
-  }
-
-  const traceId = fhirPayload.traceId
-    || fhirPayload.meta?.traceId
-    || payload.headers?.traceId
-    || payload.traceId
-    || null;
-
-  const agentId = fhirPayload.agentId
-    || fhirPayload.meta?.agentId
-    || payload.agentId
-    || null;
-
-  const bundleId = fhirPayload.id
-    || fhirPayload.bundleId
-    || payload.bundleId
-    || null;
-
-  const resourceType = fhirPayload.resourceType
-    || fhirPayload.resource?.resourceType
-    || null;
-
-  const metaTimestamp = fhirPayload.meta?.lastUpdated
-    || fhirPayload.meta?.timestamp
-    || fhirPayload.timestamp
-    || null;
-
-  let ingestionLatencyMs = null;
-  if (metaTimestamp) {
-    const sourceTime = new Date(metaTimestamp).getTime();
-    if (!isNaN(sourceTime)) {
-      ingestionLatencyMs = Date.now() - sourceTime;
-    }
-  }
-
-  const status = determineFhirStatus(fhirPayload, payload);
-
-  return { traceId, agentId, bundleId, resourceType, status, envelopeType, ingestionLatencyMs, fhirPayload };
-}
-
-function determineFhirStatus(fhirPayload, rawPayload) {
-  if (rawPayload.topic && /error|fail|dead.letter/i.test(rawPayload.topic)) {
-    return 'error';
-  }
-  if (fhirPayload.resourceType === 'OperationOutcome') {
-    const hasError = fhirPayload.issue?.some(i => ['error', 'fatal'].includes(i.severity));
-    if (hasError) return 'error';
-  }
-  if (fhirPayload.resourceType) return 'valid';
-  return 'unknown';
-}
 
 // Webhook endpoint - unauthenticated (allow_guest=True per ZenHub #8156)
 app.post('/api/v1/callback', (req, res) => {
@@ -96,12 +30,13 @@ app.post('/api/v1/callback', (req, res) => {
     return res.status(400).json({ error: 'Empty payload' });
   }
 
-  const { traceId, agentId, bundleId, resourceType, status, envelopeType, ingestionLatencyMs, fhirPayload } = extractFhirData(payload);
+  const { traceId, agentId, bundleId, mediatorId, resourceType, status, envelopeType, ingestionLatencyMs, fhirPayload } = extractFhirData(payload);
 
   const record = {
     trace_id: traceId,
     agent_id: agentId,
     bundle_id: bundleId,
+    mediator_id: mediatorId,
     resource_type: resourceType,
     status,
     envelope_type: envelopeType,
@@ -121,12 +56,13 @@ app.post('/api/v1/callback', (req, res) => {
 });
 
 app.get('/api/v1/callbacks', (req, res) => {
-  const { limit, offset, traceId, resourceType } = req.query;
+  const { limit, offset, traceId, resourceType, mediatorId } = req.query;
   const callbacks = getCallbacks({
     limit: parseInt(limit) || 100,
     offset: parseInt(offset) || 0,
     traceId,
-    resourceType
+    resourceType,
+    mediatorId
   });
   res.json(callbacks);
 });
