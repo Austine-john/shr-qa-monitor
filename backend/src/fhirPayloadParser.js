@@ -70,6 +70,7 @@ function extractFhirData(payload) {
   ]);
 
   const mediatorId = resolveValue(fhirPayload, payload, [
+    'mediator_id',
     'mediatorId',
     'mediator.id',
     'meta.mediatorId',
@@ -128,9 +129,15 @@ function determineFhirStatus(fhirPayload, rawPayload) {
   if (rawPayload.topic && /error|fail|dead.letter/i.test(rawPayload.topic)) {
     return 'error';
   }
+  if (rawPayload.status === 'error' || fhirPayload.status === 'error') {
+    return 'error';
+  }
   if (fhirPayload.resourceType === 'OperationOutcome') {
     const hasError = fhirPayload.issue?.some((issue) => ['error', 'fatal'].includes(issue.severity));
     if (hasError) return 'error';
+  }
+  if (rawPayload.status === 'success' || fhirPayload.status === 'success') {
+    return 'valid';
   }
   if (fhirPayload.resourceType) return 'valid';
   return 'unknown';
