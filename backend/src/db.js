@@ -55,7 +55,7 @@ function insertCallback(record) {
   return result.lastInsertRowid;
 }
 
-function getCallbacks({ limit = 100, offset = 0, traceId, resourceType, mediatorId } = {}) {
+function getCallbacks({ limit = 100, offset = 0, traceId, resourceType, mediatorId, status } = {}) {
   let query = 'SELECT * FROM callbacks WHERE 1=1';
   const params = {};
 
@@ -70,6 +70,10 @@ function getCallbacks({ limit = 100, offset = 0, traceId, resourceType, mediator
   if (mediatorId) {
     query += ' AND mediator_id LIKE @mediatorId';
     params.mediatorId = `%${mediatorId}%`;
+  }
+  if (status) {
+    query += ' AND status = @status';
+    params.status = status;
   }
 
   query += ' ORDER BY id DESC LIMIT @limit OFFSET @offset';
