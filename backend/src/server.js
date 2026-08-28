@@ -20,6 +20,13 @@ app.use(express.json({ limit: '10mb' }));
 // Serve frontend static files
 app.use(express.static(path.join(__dirname, '../../frontend/dist')));
 
+// Holds the active ngrok listener once started
+let ngrokListener = null;
+
+function getNgrokWebhookUrl() {
+  if (!ngrokListener) return null;
+  return `${ngrokListener.url()}/api/v1/callback`;
+}
 
 // Webhook endpoint - unauthenticated (allow_guest=True per ZenHub #8156)
 app.post('/api/v1/callback', (req, res) => {
@@ -30,7 +37,7 @@ app.post('/api/v1/callback', (req, res) => {
     return res.status(400).json({ error: 'Empty payload' });
   }
 
-  const { traceId, agentId, bundleId, mediatorId, resourceType, status, envelopeType, ingestionLatencyMs, fhirPayload } = extractFhirData(payload);
+  const { traceId, agentId, bundleId, mediatorId, resourceType, status, envelopeType, ingestionLatencyMs } = extractFhirData(payload);
 
   const record = {
     trace_id: traceId,
@@ -56,13 +63,14 @@ app.post('/api/v1/callback', (req, res) => {
 });
 
 app.get('/api/v1/callbacks', (req, res) => {
-  const { limit, offset, traceId, resourceType, mediatorId } = req.query;
+  const { limit, offset, traceId, resourceType, mediatorId, status } = req.query;
   const callbacks = getCallbacks({
     limit: parseInt(limit) || 100,
     offset: parseInt(offset) || 0,
     traceId,
     resourceType,
-    mediatorId
+    mediatorId,
+    status,
   });
   res.json(callbacks);
 });
@@ -83,6 +91,12 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', uptime: process.uptime() });
 });
 
+// Returns the embedded ngrok tunnel URL (no polling — in-process)
+app.get('/api/v1/ngrok-url', (req, res) => {
+  const webhookUrl = getNgrokWebhookUrl();
+  res.json({ url: ngrokListener ? ngrokListener.url() : null, webhookUrl });
+});
+
 // Fallback: serve frontend for any non-API route (SPA support)
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../../frontend/dist/index.html'));
@@ -90,14 +104,37 @@ app.get('*', (req, res) => {
 
 io.on('connection', (socket) => {
   console.log(`[WS] Client connected: ${socket.id}`);
+  // Send current ngrok URL immediately on connect so the UI populates without waiting for a poll
+  const webhookUrl = getNgrokWebhookUrl();
+  if (webhookUrl) socket.emit('ngrok:url', { webhookUrl });
   socket.on('disconnect', () => {
     console.log(`[WS] Client disconnected: ${socket.id}`);
   });
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
   console.log(`\n  SHR QA Monitor - Backend`);
   console.log(`  Webhook endpoint: http://localhost:${PORT}/api/v1/callback`);
   console.log(`  Dashboard API:    http://localhost:${PORT}/api/v1/callbacks`);
   console.log(`  Health check:     http://localhost:${PORT}/health\n`);
+
+  const authtoken = process.env.NGROK_AUTHTOKEN;
+  if (!authtoken) {
+    console.log('  [ngrok] NGROK_AUTHTOKEN not set — tunnel disabled.');
+    return;
+  }
+
+  try {
+    const ngrok = require('@ngrok/ngrok');
+    const forwardOpts = { addr: PORT, authtoken };
+    if (process.env.NGROK_DOMAIN) forwardOpts.domain = process.env.NGROK_DOMAIN;
+    ngrokListener = await ngrok.forward(forwardOpts);
+    const webhookUrl = getNgrokWebhookUrl();
+    console.log(`  [ngrok] Tunnel active: ${ngrokListener.url()}`);
+    console.log(`  [ngrok] Public webhook: ${webhookUrl}\n`);
+    // Push URL to any already-connected clients (race condition edge case)
+    io.emit('ngrok:url', { webhookUrl });
+  } catch (err) {
+    console.error(`  [ngrok] Failed to start tunnel: ${err.message}`);
+  }
 });
